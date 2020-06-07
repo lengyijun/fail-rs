@@ -225,12 +225,16 @@
 
 #![deny(missing_docs, missing_debug_implementations)]
 
+#![no_std]
+use std::prelude::v1::*;
+extern crate sgx_tstd as std;
+
 use std::collections::HashMap;
 use std::env::VarError;
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, RwLock, TryLockError};
+use std::sync::{Arc, SgxCondvar as Condvar, SgxMutex as Mutex, SgxMutexGuard as MutexGuard, SgxRwLock as RwLock, TryLockError};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 
@@ -381,7 +385,7 @@ impl FromStr for Action {
         if let Some(second) = second {
             remain = second;
             match first.parse::<f32>() {
-                Err(e) => return Err(format!("failed to parse frequency: {}", e)),
+                Err(e) => return Err(std::format!("failed to parse frequency: {}", e)),
                 Ok(freq) => frequency = freq / 100.0,
             }
         }
@@ -391,7 +395,7 @@ impl FromStr for Action {
         if let Some(second) = second {
             remain = second;
             match first.parse() {
-                Err(e) => return Err(format!("failed to parse count: {}", e)),
+                Err(e) => return Err(std::format!("failed to parse count: {}", e)),
                 Ok(cnt) => max_cnt = Some(cnt),
             }
         }
@@ -399,7 +403,7 @@ impl FromStr for Action {
         let parse_timeout = || match args {
             None => Err("sleep require timeout".to_owned()),
             Some(timeout_str) => match timeout_str.parse() {
-                Err(e) => Err(format!("failed to parse timeout: {}", e)),
+                Err(e) => Err(std::format!("failed to parse timeout: {}", e)),
                 Ok(timeout) => Ok(timeout),
             },
         };
@@ -413,7 +417,7 @@ impl FromStr for Action {
             "pause" => Task::Pause,
             "yield" => Task::Yield,
             "delay" => Task::Delay(parse_timeout()?),
-            _ => return Err(format!("unrecognized command {:?}", remain)),
+            _ => return Err(std::format!("unrecognized command {:?}", remain)),
         };
 
         Ok(Action::new(task, frequency, max_cnt))
@@ -587,10 +591,10 @@ impl<'a> FailScenario<'a> {
     }
 
     /// Clean all registered fail points.
-    fn cleanup(registry: &mut std::sync::RwLockWriteGuard<'a, Registry>) {
+    fn cleanup(registry: &mut std::sync::SgxRwLockWriteGuard<'a, Registry>) {
         for p in registry.values() {
             // wake up all pause failpoint.
-            p.set_actions("", vec![]);
+            p.set_actions("", std::vec![]);
         }
         registry.clear();
     }
@@ -684,7 +688,7 @@ where
         .entry(name.into())
         .or_insert_with(|| Arc::new(FailPoint::new()));
     let action = Action::from_callback(f);
-    let actions = vec![action];
+    let actions = std::vec![action];
     p.set_actions("callback", actions);
     Ok(())
 }
@@ -696,7 +700,7 @@ pub fn remove<S: AsRef<str>>(name: S) {
     let mut registry = REGISTRY.registry.write().unwrap();
     if let Some(p) = registry.remove(name.as_ref()) {
         // wake up all pause failpoint.
-        p.set_actions("", vec![]);
+        p.set_actions("", std::vec![]);
     }
 }
 
@@ -824,19 +828,19 @@ mod tests {
     #[test]
     fn test_off() {
         let point = FailPoint::new();
-        point.set_actions("", vec![Action::new(Task::Off, 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Off, 1.0, None)]);
         assert!(point.eval("test_fail_point_off").is_none());
     }
 
     #[test]
     fn test_return() {
         let point = FailPoint::new();
-        point.set_actions("", vec![Action::new(Task::Return(None), 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Return(None), 1.0, None)]);
         let res = point.eval("test_fail_point_return");
         assert_eq!(res, Some(None));
 
         let ret = Some("test".to_owned());
-        point.set_actions("", vec![Action::new(Task::Return(ret.clone()), 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Return(ret.clone()), 1.0, None)]);
         let res = point.eval("test_fail_point_return");
         assert_eq!(res, Some(ret));
     }
@@ -845,7 +849,7 @@ mod tests {
     fn test_sleep() {
         let point = FailPoint::new();
         let timer = Instant::now();
-        point.set_actions("", vec![Action::new(Task::Sleep(1000), 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Sleep(1000), 1.0, None)]);
         assert!(point.eval("test_fail_point_sleep").is_none());
         assert!(timer.elapsed() > Duration::from_millis(1000));
     }
@@ -854,7 +858,7 @@ mod tests {
     #[test]
     fn test_panic() {
         let point = FailPoint::new();
-        point.set_actions("", vec![Action::new(Task::Panic(None), 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Panic(None), 1.0, None)]);
         point.eval("test_fail_point_panic");
     }
 
@@ -867,18 +871,18 @@ mod tests {
             }
             fn log(&self, record: &log::Record) {
                 let mut buf = self.0.lock().unwrap();
-                buf.push(format!("{}", record.args()));
+                buf.push(std::format!("{}", record.args()));
             }
             fn flush(&self) {}
         }
 
-        let buffer = Arc::new(Mutex::new(vec![]));
+        let buffer = Arc::new(Mutex::new(std::vec![]));
         let collector = LogCollector(buffer.clone());
         log::set_max_level(log::LevelFilter::Info);
         log::set_boxed_logger(Box::new(collector)).unwrap();
 
         let point = FailPoint::new();
-        point.set_actions("", vec![Action::new(Task::Print(None), 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Print(None), 1.0, None)]);
         assert!(point.eval("test_fail_point_print").is_none());
         let msg = buffer.lock().unwrap().pop().unwrap();
         assert_eq!(msg, "failpoint test_fail_point_print executed.");
@@ -887,7 +891,7 @@ mod tests {
     #[test]
     fn test_pause() {
         let point = Arc::new(FailPoint::new());
-        point.set_actions("", vec![Action::new(Task::Pause, 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Pause, 1.0, None)]);
         let p = point.clone();
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
@@ -895,14 +899,14 @@ mod tests {
             tx.send(()).unwrap();
         });
         assert!(rx.recv_timeout(Duration::from_secs(1)).is_err());
-        point.set_actions("", vec![Action::new(Task::Off, 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Off, 1.0, None)]);
         rx.recv_timeout(Duration::from_secs(1)).unwrap();
     }
 
     #[test]
     fn test_yield() {
         let point = FailPoint::new();
-        point.set_actions("", vec![Action::new(Task::Yield, 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Yield, 1.0, None)]);
         assert!(point.eval("test_fail_point_yield").is_none());
     }
 
@@ -910,7 +914,7 @@ mod tests {
     fn test_delay() {
         let point = FailPoint::new();
         let timer = Instant::now();
-        point.set_actions("", vec![Action::new(Task::Delay(1000), 1.0, None)]);
+        point.set_actions("", std::vec![Action::new(Task::Delay(1000), 1.0, None)]);
         assert!(point.eval("test_fail_point_delay").is_none());
         assert!(timer.elapsed() > Duration::from_millis(1000));
     }
@@ -918,7 +922,7 @@ mod tests {
     #[test]
     fn test_frequency_and_count() {
         let point = FailPoint::new();
-        point.set_actions("", vec![Action::new(Task::Return(None), 0.8, Some(100))]);
+        point.set_actions("", std::vec![Action::new(Task::Return(None), 0.8, Some(100))]);
         let mut count = 0;
         let mut times = 0f64;
         while count < 100 {
@@ -935,7 +939,7 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        let cases = vec![
+        let cases = std::vec![
             ("return", Action::new(Task::Return(None), 1.0, None)),
             (
                 "return(64)",
@@ -976,7 +980,7 @@ mod tests {
             assert_eq!(res, exp);
         }
 
-        let fail_cases = vec![
+        let fail_cases = std::vec![
             "delay",
             "sleep",
             "Return",
