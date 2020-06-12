@@ -15,7 +15,7 @@ exclude = ["/.github/*", "/.travis.yml", "/appveyor.yml"]
 
 [dependencies]
 log = { git = "https://github.com/mesalock-linux/log-sgx", branch = "master", features = ["kv_unstable"] }
-lazy_static = {git="https://github.com/lengyijun/lazy-static.rs"}
+lazy_static = { version = "1.1.0",  features = ["spin_no_std"] }
 rand = { git = "https://github.com/mesalock-linux/rand-sgx", tag = "v0.7.3_sgx1.1.2", features = ["small_rng"] }
 
 [target.'cfg(not(target_env = "sgx"))'.dependencies]
